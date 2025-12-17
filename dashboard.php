@@ -3,6 +3,15 @@ require_once __DIR__ . '/includes/auth.php';
 require_login();
 
 $user = current_user();
+$today = date('Y-m-d');
+$habits = get_habits($user['id']);
+$completedIds = get_today_completions($user['id']);
+$todos = get_todos($user['id'], $today);
+$summary = completion_summary($user['id']);
+$heatmap = build_heatmap($user['id']);
+$collectibles = list_collectibles($user['id']);
+$progressClass = $summary['overall']['percentage'] >= 90 ? 'success' : '';
+$yesterdayReward = attempt_daily_reward($user['id'], date('Y-m-d', strtotime('-1 day')));
 $habits = get_habits($user['id']);
 $completedIds = get_today_completions($user['id']);
 $summary = completion_summary($user['id']);
@@ -36,6 +45,18 @@ $progressClass = $summary['percentage'] >= 90 ? 'success' : '';
                 <div>
                     <p class="muted">Today</p>
                     <h3><?= date('F j, Y'); ?></h3>
+                </div>
+                <div class="progress-text <?= $progressClass; ?>"><?= $summary['overall']['completed']; ?>/<?= max($summary['overall']['total'], 1); ?> done — <?= $summary['overall']['percentage']; ?>%</div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill <?= $progressClass; ?>" style="width: <?= $summary['overall']['percentage']; ?>%"></div>
+            </div>
+            <div class="progress-grid">
+                <div class="pill <?= $summary['habits']['percentage'] >= 90 ? 'success' : ''; ?>" id="habitProgress">
+                    Habits: <?= $summary['habits']['completed']; ?>/<?= max($summary['habits']['total'], 1); ?> (<?= $summary['habits']['percentage']; ?>%)
+                </div>
+                <div class="pill <?= $summary['todos']['percentage'] >= 90 ? 'success' : ''; ?>" id="todoProgress">
+                    To-dos: <?= $summary['todos']['completed']; ?>/<?= max($summary['todos']['total'], 1); ?> (<?= $summary['todos']['percentage']; ?>%)
                 </div>
                 <div class="progress-text <?= $progressClass; ?>"><?= $summary['completed']; ?>/<?= max($summary['total'], 1); ?> completed — <?= $summary['percentage']; ?>%</div>
             </div>
@@ -73,6 +94,44 @@ $progressClass = $summary['percentage'] >= 90 ? 'success' : '';
                     </ul>
                 </div>
                 <div class="tasks">
+                    <div class="task-header">
+                        <h4>Today's To-Do</h4>
+                        <button class="btn small" id="addTodoBtn">Add To-Do</button>
+                    </div>
+                    <ul class="habit-list" id="todoList">
+                        <?php if (empty($todos)): ?>
+                            <li class="empty">Add to-dos unique to today.</li>
+                        <?php endif; ?>
+                        <?php foreach ($todos as $todo): ?>
+                            <li class="habit-item" data-todo-id="<?= $todo['id']; ?>">
+                                <label class="checkbox">
+                                    <input type="checkbox" <?= $todo['is_completed'] ? 'checked' : ''; ?> data-todo="<?= $todo['id']; ?>">
+                                    <span class="checkmark"></span>
+                                    <span class="habit-name"><?= sanitize($todo['title']); ?></span>
+                                </label>
+                                <?php if (!empty($todo['notes'])): ?>
+                                    <p class="muted small"><?= sanitize($todo['notes']); ?></p>
+                                <?php endif; ?>
+                                <div class="habit-actions">
+                                    <button class="btn tiny reorder" data-direction="up">↑</button>
+                                    <button class="btn tiny reorder" data-direction="down">↓</button>
+                                    <button class="btn tiny edit todo-edit">Edit</button>
+                                    <button class="btn tiny danger delete">Delete</button>
+                                </div>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <div class="tasks">
+                    <div class="task-header spaced">
+                        <h4>Collectibles</h4>
+                        <?php if ($yesterdayReward['awarded']): ?>
+                            <span class="pill success">Earned from yesterday!</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="collectibles" id="collectiblesGrid">
+                        <?php if (empty($collectibles)): ?>
+                            <p class="muted">Finish 90% of both lists to unlock your first collectible.</p>
                     <h4>Collectibles</h4>
                     <div class="collectibles" id="collectiblesGrid">
                         <?php if (empty($collectibles)): ?>
@@ -116,6 +175,26 @@ $progressClass = $summary['percentage'] >= 90 ? 'success' : '';
                 </label>
                 <div class="modal-actions">
                     <button type="button" class="btn ghost" id="closeHabitModal">Cancel</button>
+                    <button type="submit" class="btn primary">Save</button>
+                </div>
+                <input type="hidden" name="csrf_token" value="<?= csrf_token(); ?>">
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="todoModal" hidden>
+        <div class="modal-content">
+            <h3 id="todoModalTitle">Add To-Do</h3>
+            <form id="todoForm">
+                <input type="hidden" name="todo_id" id="todoId">
+                <label>Title
+                    <input type="text" name="title" id="todoTitle" required maxlength="200">
+                </label>
+                <label>Notes
+                    <textarea name="notes" id="todoNotes" rows="2"></textarea>
+                </label>
+                <div class="modal-actions">
+                    <button type="button" class="btn ghost" id="closeTodoModal">Cancel</button>
                     <button type="submit" class="btn primary">Save</button>
                 </div>
                 <input type="hidden" name="csrf_token" value="<?= csrf_token(); ?>">

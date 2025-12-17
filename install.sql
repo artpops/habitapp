@@ -46,3 +46,16 @@ CREATE TABLE IF NOT EXISTS daily_rewards (
     UNIQUE KEY unique_daily_reward (user_id, reward_date),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS todos (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    notes TEXT,
+    task_date DATE NOT NULL,
+    is_completed BOOLEAN DEFAULT FALSE,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_todos_user_date (user_id, task_date)
+);

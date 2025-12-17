@@ -152,6 +152,33 @@ h1, h2, h3, h4 { margin: 0; }
 .progress-text { font-weight: 700; }
 .progress-text.success { color: var(--green); }
 
+.progress-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.pill {
+    background: #f5f7fd;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-weight: 700;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pill.success { color: #1b5e20; background: #e2f5e6; border-color: #c8ebcf; }
+
+.task-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.tasks h4 { margin: 0 0 8px; }
+
+.task-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.task-header.spaced { align-items: center; }
+
 .task-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .tasks h4 { margin: 0 0 8px; }
 

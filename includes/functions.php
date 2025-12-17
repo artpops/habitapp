@@ -61,12 +61,63 @@ function get_today_completions(int $userId): array
     return $completed;
 }
 
+function get_todos(int $userId, string $date): array
+{
+    $conn = db();
+    $stmt = $conn->prepare('SELECT id, title, notes, task_date, is_completed, sort_order FROM todos WHERE user_id = ? AND task_date = ? ORDER BY sort_order ASC, id ASC');
+    $stmt->bind_param('is', $userId, $date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $todos = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    return $todos;
+}
+
 function build_heatmap(int $userId): array
 {
     $start = new DateTime('first day of this month');
     $end = new DateTime('last day of this month');
     $conn = db();
 
+    $startStr = $start->format('Y-m-d');
+    $endStr = $end->format('Y-m-d');
+
+    $habitStmt = $conn->prepare('SELECT completion_date, COUNT(*) as total FROM habit_completions WHERE user_id = ? AND completion_date BETWEEN ? AND ? GROUP BY completion_date');
+    $habitStmt->bind_param('iss', $userId, $startStr, $endStr);
+    $habitStmt->execute();
+    $habitResult = $habitStmt->get_result();
+    $habitCompletionMap = [];
+    while ($row = $habitResult->fetch_assoc()) {
+        $habitCompletionMap[$row['completion_date']] = (int) $row['total'];
+    }
+    $habitStmt->close();
+
+    $todoStmt = $conn->prepare('SELECT task_date, COUNT(*) as total, SUM(is_completed) as done FROM todos WHERE user_id = ? AND task_date BETWEEN ? AND ? GROUP BY task_date');
+    $todoStmt->bind_param('iss', $userId, $startStr, $endStr);
+    $todoStmt->execute();
+    $todoResult = $todoStmt->get_result();
+    $todoTotals = [];
+    $todoCompleted = [];
+    while ($row = $todoResult->fetch_assoc()) {
+        $todoTotals[$row['task_date']] = (int) $row['total'];
+        $todoCompleted[$row['task_date']] = (int) ($row['done'] ?? 0);
+    }
+    $todoStmt->close();
+
+    $totalHabits = count(get_habits($userId));
+    $heatmap = [];
+    $cursor = clone $start;
+    $today = new DateTime('today');
+
+    while ($cursor <= $end) {
+        $dateStr = $cursor->format('Y-m-d');
+        $habitsCompleted = $habitCompletionMap[$dateStr] ?? 0;
+        $todosForDay = $todoTotals[$dateStr] ?? 0;
+        $todosCompleted = $todoCompleted[$dateStr] ?? 0;
+        $totalTasks = $totalHabits + $todosForDay;
+        $completedTasks = $habitsCompleted + $todosCompleted;
+        $percent = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
+        if ($cursor > $today) {
     $stmt = $conn->prepare('SELECT completion_date, COUNT(*) as total FROM habit_completions WHERE user_id = ? AND completion_date BETWEEN ? AND ? GROUP BY completion_date');
     $startStr = $start->format('Y-m-d');
     $endStr = $end->format('Y-m-d');
@@ -112,6 +163,10 @@ function completion_summary(int $userId, ?string $date = null): array
 {
     $date = $date ?: date('Y-m-d');
     $conn = db();
+
+    $habitsTotal = count(get_habits($userId));
+    $habitsCompleted = 0;
+    if ($habitsTotal > 0) {
     $totalHabits = count(get_habits($userId));
     $completedCount = 0;
     if ($totalHabits > 0) {
@@ -120,6 +175,42 @@ function completion_summary(int $userId, ?string $date = null): array
         $stmt->execute();
         $result = $stmt->get_result();
         $row = $result->fetch_assoc();
+        $habitsCompleted = (int) $row['total'];
+        $stmt->close();
+    }
+
+    $todoTotalsStmt = $conn->prepare('SELECT COUNT(*) as total, SUM(is_completed) as done FROM todos WHERE user_id = ? AND task_date = ?');
+    $todoTotalsStmt->bind_param('is', $userId, $date);
+    $todoTotalsStmt->execute();
+    $todoTotalsResult = $todoTotalsStmt->get_result()->fetch_assoc() ?: ['total' => 0, 'done' => 0];
+    $todoTotalsStmt->close();
+
+    $todoTotal = (int) $todoTotalsResult['total'];
+    $todoCompleted = (int) ($todoTotalsResult['done'] ?? 0);
+
+    $habitPercent = $habitsTotal > 0 ? round(($habitsCompleted / $habitsTotal) * 100) : 100;
+    $todoPercent = $todoTotal > 0 ? round(($todoCompleted / $todoTotal) * 100) : 100;
+
+    $overallTotal = $habitsTotal + $todoTotal;
+    $overallCompleted = $habitsCompleted + $todoCompleted;
+    $overallPercent = $overallTotal > 0 ? round(($overallCompleted / $overallTotal) * 100) : 100;
+
+    return [
+        'habits' => [
+            'total' => $habitsTotal,
+            'completed' => $habitsCompleted,
+            'percentage' => $habitPercent,
+        ],
+        'todos' => [
+            'total' => $todoTotal,
+            'completed' => $todoCompleted,
+            'percentage' => $todoPercent,
+        ],
+        'overall' => [
+            'total' => $overallTotal,
+            'completed' => $overallCompleted,
+            'percentage' => $overallPercent,
+        ],
         $completedCount = (int) $row['total'];
         $stmt->close();
     }
@@ -167,6 +258,17 @@ function scan_award_files(): array
 function attempt_daily_reward(int $userId, ?string $date = null): array
 {
     $date = $date ?: date('Y-m-d');
+    $today = date('Y-m-d');
+    if ($date >= $today) {
+        return ['awarded' => false, 'message' => 'Rewards unlock after midnight.'];
+    }
+
+    $conn = db();
+    $summary = completion_summary($userId, $date);
+    $meetsHabits = $summary['habits']['percentage'] >= 90;
+    $meetsTodos = $summary['todos']['percentage'] >= 90;
+    if (!$meetsHabits || !$meetsTodos) {
+        return ['awarded' => false, 'message' => 'Complete 90% of habits and to-dos to earn a collectible.'];
     $conn = db();
     $summary = completion_summary($userId, $date);
     if ($summary['total'] === 0 || $summary['percentage'] < 90) {
@@ -181,6 +283,7 @@ function attempt_daily_reward(int $userId, ?string $date = null): array
         $result = $check->get_result();
         if ($result->num_rows > 0) {
             $conn->commit();
+            return ['awarded' => false, 'message' => 'Collectible already awarded for that day.'];
             return ['awarded' => false, 'message' => 'Collectible already awarded today.'];
         }
         $check->close();
@@ -221,6 +324,15 @@ function attempt_daily_reward(int $userId, ?string $date = null): array
 function profile_stats(int $userId): array
 {
     $conn = db();
+
+    $daysStmt = $conn->prepare('SELECT COUNT(DISTINCT day) as days_tracked FROM (
+        SELECT completion_date AS day FROM habit_completions WHERE user_id = ?
+        UNION ALL
+        SELECT task_date AS day FROM todos WHERE user_id = ?
+    ) AS d');
+    $daysStmt->bind_param('ii', $userId, $userId);
+    $daysStmt->execute();
+    $daysResult = $daysStmt->get_result()->fetch_assoc() ?: ['days_tracked' => 0];
     $daysStmt = $conn->prepare('SELECT COUNT(DISTINCT completion_date) as days_tracked, SUM(1) as total_checks FROM habit_completions WHERE user_id = ?');
     $daysStmt->bind_param('i', $userId);
     $daysStmt->execute();
@@ -235,6 +347,27 @@ function profile_stats(int $userId): array
     $habitCount = ($habitResult->fetch_assoc()['habit_count'] ?? 0);
     $habitCountStmt->close();
 
+    $habitChecksStmt = $conn->prepare('SELECT COUNT(*) as total_checks FROM habit_completions WHERE user_id = ?');
+    $habitChecksStmt->bind_param('i', $userId);
+    $habitChecksStmt->execute();
+    $habitChecks = ($habitChecksStmt->get_result()->fetch_assoc()['total_checks'] ?? 0);
+    $habitChecksStmt->close();
+
+    $todoStmt = $conn->prepare('SELECT COUNT(*) as total_tasks, SUM(is_completed) as done FROM todos WHERE user_id = ?');
+    $todoStmt->bind_param('i', $userId);
+    $todoStmt->execute();
+    $todoData = $todoStmt->get_result()->fetch_assoc() ?: ['total_tasks' => 0, 'done' => 0];
+    $todoStmt->close();
+
+    $daysTracked = (int) $daysResult['days_tracked'];
+    $totalCapacity = ($habitCount * max($daysTracked, 1)) + (int) $todoData['total_tasks'];
+    $totalCompleted = $habitChecks + (int) ($todoData['done'] ?? 0);
+    $completionRate = $totalCapacity > 0 ? round(($totalCompleted / $totalCapacity) * 100) : 0;
+
+    $collectibles = list_collectibles($userId);
+
+    return [
+        'days_tracked' => $daysTracked,
     $collectibles = list_collectibles($userId);
 
     $completionRate = $habitCount > 0 && $data['days_tracked'] > 0
