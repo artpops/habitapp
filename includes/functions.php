@@ -118,6 +118,26 @@ function build_heatmap(int $userId): array
         $completedTasks = $habitsCompleted + $todosCompleted;
         $percent = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100) : 0;
         if ($cursor > $today) {
+    $stmt = $conn->prepare('SELECT completion_date, COUNT(*) as total FROM habit_completions WHERE user_id = ? AND completion_date BETWEEN ? AND ? GROUP BY completion_date');
+    $startStr = $start->format('Y-m-d');
+    $endStr = $end->format('Y-m-d');
+    $stmt->bind_param('iss', $userId, $startStr, $endStr);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $completionMap = [];
+    while ($row = $result->fetch_assoc()) {
+        $completionMap[$row['completion_date']] = (int) $row['total'];
+    }
+    $stmt->close();
+
+    $totalHabits = max(count(get_habits($userId)), 1);
+    $heatmap = [];
+    $cursor = clone $start;
+    while ($cursor <= $end) {
+        $dateStr = $cursor->format('Y-m-d');
+        $completed = $completionMap[$dateStr] ?? 0;
+        $percent = $totalHabits > 0 ? round(($completed / $totalHabits) * 100) : 0;
+        if ($cursor > new DateTime()) {
             $color = 'gray';
         } elseif ($percent >= 90) {
             $color = 'green';
@@ -147,6 +167,9 @@ function completion_summary(int $userId, ?string $date = null): array
     $habitsTotal = count(get_habits($userId));
     $habitsCompleted = 0;
     if ($habitsTotal > 0) {
+    $totalHabits = count(get_habits($userId));
+    $completedCount = 0;
+    if ($totalHabits > 0) {
         $stmt = $conn->prepare('SELECT COUNT(*) as total FROM habit_completions WHERE user_id = ? AND completion_date = ?');
         $stmt->bind_param('is', $userId, $date);
         $stmt->execute();
@@ -188,6 +211,14 @@ function completion_summary(int $userId, ?string $date = null): array
             'completed' => $overallCompleted,
             'percentage' => $overallPercent,
         ],
+        $completedCount = (int) $row['total'];
+        $stmt->close();
+    }
+    $percentage = $totalHabits > 0 ? round(($completedCount / $totalHabits) * 100) : 0;
+    return [
+        'total' => $totalHabits,
+        'completed' => $completedCount,
+        'percentage' => $percentage,
     ];
 }
 
@@ -238,6 +269,10 @@ function attempt_daily_reward(int $userId, ?string $date = null): array
     $meetsTodos = $summary['todos']['percentage'] >= 90;
     if (!$meetsHabits || !$meetsTodos) {
         return ['awarded' => false, 'message' => 'Complete 90% of habits and to-dos to earn a collectible.'];
+    $conn = db();
+    $summary = completion_summary($userId, $date);
+    if ($summary['total'] === 0 || $summary['percentage'] < 90) {
+        return ['awarded' => false, 'message' => 'Keep going to earn a collectible!'];
     }
 
     $conn->begin_transaction();
@@ -249,6 +284,7 @@ function attempt_daily_reward(int $userId, ?string $date = null): array
         if ($result->num_rows > 0) {
             $conn->commit();
             return ['awarded' => false, 'message' => 'Collectible already awarded for that day.'];
+            return ['awarded' => false, 'message' => 'Collectible already awarded today.'];
         }
         $check->close();
 
@@ -297,6 +333,11 @@ function profile_stats(int $userId): array
     $daysStmt->bind_param('ii', $userId, $userId);
     $daysStmt->execute();
     $daysResult = $daysStmt->get_result()->fetch_assoc() ?: ['days_tracked' => 0];
+    $daysStmt = $conn->prepare('SELECT COUNT(DISTINCT completion_date) as days_tracked, SUM(1) as total_checks FROM habit_completions WHERE user_id = ?');
+    $daysStmt->bind_param('i', $userId);
+    $daysStmt->execute();
+    $result = $daysStmt->get_result();
+    $data = $result->fetch_assoc() ?: ['days_tracked' => 0, 'total_checks' => 0];
     $daysStmt->close();
 
     $habitCountStmt = $conn->prepare('SELECT COUNT(*) as habit_count FROM habits WHERE user_id = ?');
@@ -327,6 +368,14 @@ function profile_stats(int $userId): array
 
     return [
         'days_tracked' => $daysTracked,
+    $collectibles = list_collectibles($userId);
+
+    $completionRate = $habitCount > 0 && $data['days_tracked'] > 0
+        ? round(($data['total_checks'] / ($habitCount * $data['days_tracked'])) * 100)
+        : 0;
+
+    return [
+        'days_tracked' => (int) $data['days_tracked'],
         'completion_rate' => $completionRate,
         'collectibles_count' => count($collectibles),
     ];

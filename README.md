@@ -1,6 +1,7 @@
 # Habit Tracking Web Application
 
 A PHP 7.4+ habit tracking app designed for shared hosting. Users can create habits, track daily progress with a heatmap, manage date-specific to-dos, and earn collectibles once both lists hit 90%+ for a finished day.
+A PHP 7.4+ habit tracking app designed for shared hosting. Users can create habits, track daily progress with a heatmap, and earn collectibles when they complete 90% or more of their tasks for the day.
 
 ## Features
 - Registration and login with password hashing (`password_hash`).
@@ -9,6 +10,9 @@ A PHP 7.4+ habit tracking app designed for shared hosting. Users can create habi
 - Heatmap view for the current month.
 - Habit CRUD (add, edit, delete) and reordering controls.
 - Collectible rewards unlocked after midnight when both habits and to-dos reach 90%+ for the finished day, with sample SVG images in `/awards/`.
+- Heatmap view for the current month.
+- Habit CRUD (add, edit, delete) and reordering controls.
+- Collectible rewards unlocked at 90%+ daily completion, with sample SVG images in `/awards/`.
 - Public profile pages exposing only aggregated activity, heatmap, and collectibles.
 - CSRF tokens on all forms/API calls and server-side validation/sanitization.
 
@@ -20,6 +24,7 @@ A PHP 7.4+ habit tracking app designed for shared hosting. Users can create habi
 │   ├── completions.php
 │   ├── collectibles.php
 │   └── todos.php
+│   └── collectibles.php
 ├── assets/
 │   ├── css/style.css
 │   └── js/app.js
@@ -48,6 +53,9 @@ A PHP 7.4+ habit tracking app designed for shared hosting. Users can create habi
 - To-do completion rate is `completed / total to-dos` for that date (if no to-dos, treated as 100%).
 - A reward is only considered after midnight for the prior day. Both rates must be 90%+ and the day must be in the past.
 - If eligible and no prior reward exists for that date, a random collectible not already owned is awarded. If the collection is complete, users see a congratulatory message instead.
+- Completion rate is `completed / total habits` for the day.
+- If the percentage is at least 90% and no reward was given that day, a random collectible not already owned is awarded.
+- If the collection is complete, users see a congratulatory message instead of a new reward.
 
 ## Security Notes
 - CSRF tokens are required for all form submissions and fetch requests.

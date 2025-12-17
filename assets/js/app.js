@@ -56,6 +56,11 @@
         progressFill.style.width = `${overall.percentage}%`;
         progressText.textContent = `${overall.completed}/${Math.max(overall.total, 1)} done — ${overall.percentage}%`;
         if (overall.percentage >= 90) {
+    function updateProgress(summary) {
+        if (!summary) return;
+        progressFill.style.width = `${summary.percentage}%`;
+        progressText.textContent = `${summary.completed}/${Math.max(summary.total, 1)} completed — ${summary.percentage}%`;
+        if (summary.percentage >= 90) {
             progressFill.classList.add('success');
             progressText.classList.add('success');
         } else {
@@ -78,6 +83,7 @@
             alert(`New collectible unlocked: ${reward.filename}`);
             window.location.reload();
         } else if (reward && (reward.message === 'Collection complete!' || reward.message === 'Complete 90% of habits and to-dos to earn a collectible.')) {
+        } else if (reward && reward.message === 'Collection complete!') {
             alert(reward.message);
         }
     }
@@ -259,4 +265,7 @@
     if (addTodoBtn) addTodoBtn.addEventListener('click', () => openTodoModal());
     if (closeTodoModalBtn) closeTodoModalBtn.addEventListener('click', () => toggleTodoModal(false));
     if (todoForm) todoForm.addEventListener('submit', submitTodo);
+    if (addHabitBtn) addHabitBtn.addEventListener('click', () => openHabitModal());
+    if (closeModalBtn) closeModalBtn.addEventListener('click', () => toggleModal(false));
+    if (habitForm) habitForm.addEventListener('submit', submitHabit);
 })();
