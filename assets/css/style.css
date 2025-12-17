@@ -179,6 +179,9 @@ h1, h2, h3, h4 { margin: 0; }
 .task-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .task-header.spaced { align-items: center; }
 
+.task-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.tasks h4 { margin: 0 0 8px; }
+
 .habit-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
 .habit-item {
     background: #f7f9ff;

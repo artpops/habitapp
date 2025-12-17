@@ -12,6 +12,12 @@ $heatmap = build_heatmap($user['id']);
 $collectibles = list_collectibles($user['id']);
 $progressClass = $summary['overall']['percentage'] >= 90 ? 'success' : '';
 $yesterdayReward = attempt_daily_reward($user['id'], date('Y-m-d', strtotime('-1 day')));
+$habits = get_habits($user['id']);
+$completedIds = get_today_completions($user['id']);
+$summary = completion_summary($user['id']);
+$heatmap = build_heatmap($user['id']);
+$collectibles = list_collectibles($user['id']);
+$progressClass = $summary['percentage'] >= 90 ? 'success' : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,6 +58,10 @@ $yesterdayReward = attempt_daily_reward($user['id'], date('Y-m-d', strtotime('-1
                 <div class="pill <?= $summary['todos']['percentage'] >= 90 ? 'success' : ''; ?>" id="todoProgress">
                     To-dos: <?= $summary['todos']['completed']; ?>/<?= max($summary['todos']['total'], 1); ?> (<?= $summary['todos']['percentage']; ?>%)
                 </div>
+                <div class="progress-text <?= $progressClass; ?>"><?= $summary['completed']; ?>/<?= max($summary['total'], 1); ?> completed — <?= $summary['percentage']; ?>%</div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill <?= $progressClass; ?>" style="width: <?= $summary['percentage']; ?>%"></div>
             </div>
             <div class="task-columns">
                 <div class="tasks">
@@ -122,6 +132,10 @@ $yesterdayReward = attempt_daily_reward($user['id'], date('Y-m-d', strtotime('-1
                     <div class="collectibles" id="collectiblesGrid">
                         <?php if (empty($collectibles)): ?>
                             <p class="muted">Finish 90% of both lists to unlock your first collectible.</p>
+                    <h4>Collectibles</h4>
+                    <div class="collectibles" id="collectiblesGrid">
+                        <?php if (empty($collectibles)): ?>
+                            <p class="muted">Finish 90% of today to unlock your first collectible.</p>
                         <?php else: ?>
                             <?php foreach ($collectibles as $item): ?>
                                 <div class="collectible">
